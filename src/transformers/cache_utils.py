@@ -320,6 +320,7 @@ class DynamicCache(Cache):
     def __init__(self) -> None:
         super().__init__()
         self.key_cache: List[torch.Tensor] = []
+        self.query_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
@@ -351,6 +352,7 @@ class DynamicCache(Cache):
     def update(
         self,
         key_states: torch.Tensor,
+        query_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
@@ -378,9 +380,11 @@ class DynamicCache(Cache):
         # Update the cache
         if len(self.key_cache) <= layer_idx:
             self.key_cache.append(key_states)
+            self.query_cache.append(query_states)
             self.value_cache.append(value_states)
         else:
             self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+            self.query_cache[layer_idx] = torch.cat([self.query_cache[layer_idx], query_states], dim=-2)
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
@@ -401,7 +405,7 @@ class DynamicCache(Cache):
         backward compatibility."""
         legacy_cache = ()
         for layer_idx in range(len(self)):
-            legacy_cache += ((self.key_cache[layer_idx], self.value_cache[layer_idx]),)
+            legacy_cache += ((self.key_cache[layer_idx], self.query_cache[layer_idx], self.value_cache[layer_idx]),)
         return legacy_cache
 
     @classmethod
